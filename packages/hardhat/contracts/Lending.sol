@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
+import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Corn.sol";
 import "./CornDEX.sol";
@@ -82,7 +83,8 @@ contract Lending is Ownable {
         // 1.获取用户的抵押
         uint256 userCollateral = s_userCollateral[user];
         // 2.计算抵押的corn价值
-        return userCollateral * i_cornDEX.currentPrice();
+        // ⚠️这里需要除以一个1e18
+        return userCollateral * i_cornDEX.currentPrice() / 1e18;
     }
 
     /**
@@ -99,7 +101,7 @@ contract Lending is Ownable {
             return type(uint256).max;
         }
         // 3.否则计算抵贷比
-        // 注意：先 * 1e18以防精度丢失
+        // ⚠️先 * 1e18以防精度丢失
         return (userCollateralValue * 1e18) / userBorrowed;
     }
 
@@ -110,7 +112,7 @@ contract Lending is Ownable {
      */
     function isLiquidatable(address user) public view returns (bool) {
         // 返回是否达到清算点，
-        // 注意：position是百分比，需要 * 100，而 COLLATERAL_RATIO要与position一样扩大1e18
+        // ⚠️position是百分比，需要 * 100，而 COLLATERAL_RATIO要与position一样扩大1e18
         return _calculatePositionRatio(user) * 100 < COLLATERAL_RATIO * 1e18;
     }
 
@@ -129,13 +131,43 @@ contract Lending is Ownable {
      * @notice Allows users to borrow corn based on their collateral
      * @param borrowAmount The amount of corn to borrow
      */
-    function borrowCorn(uint256 borrowAmount) public {}
+    function borrowCorn(uint256 borrowAmount) public {
+        // 1.校验借贷数量
+        if (borrowAmount == 0) {
+            revert Lending__InvalidAmount();
+        }
+        // 2.更新用户贷款值
+        s_userBorrowed[msg.sender] += borrowAmount;
+        // 3.校验是否能借贷
+        _validatePosition(msg.sender);
+        // 4.发放corn借贷
+        bool sent = i_corn.transferFrom(address(this), msg.sender, borrowAmount);
+        if (!sent) {
+            revert Lending__BorrowingFailed();
+        }
+        // 5.触发完成借贷事件
+        emit AssetBorrowed(msg.sender, borrowAmount, i_cornDEX.currentPrice());
+    }
 
     /**
      * @notice Allows users to repay corn and reduce their debt
      * @param repayAmount The amount of corn to repay
      */
-    function repayCorn(uint256 repayAmount) public {}
+    function repayCorn(uint256 repayAmount) public {
+        // 1.校验用户还贷数量
+        if (repayAmount == 0 || s_userBorrowed[msg.sender] < repayAmount) {
+            revert Lending__InvalidAmount();
+        }
+        // 2.更新用户贷款值
+        s_userBorrowed[msg.sender] -= repayAmount;
+        // 3.转移用户corn到lending合约
+        bool sent = i_corn.transferFrom(msg.sender, address(this), repayAmount);
+        if (!sent) {
+            revert Lending__RepayingFailed();
+        }
+        // 4.触发用户还贷事件
+        emit AssetRepaid(msg.sender, repayAmount, i_cornDEX.currentPrice());
+    }
 
     /**
      * @notice Allows liquidators to liquidate unsafe positions
