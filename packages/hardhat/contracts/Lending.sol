@@ -67,7 +67,7 @@ contract Lending is Ownable {
         }
         // 2.更新用户取回的抵押
         s_userCollateral[msg.sender] -= amount;
-        (bool sent, ) = msg.sender.call{value: amount}("");
+        (bool sent, ) = msg.sender.call{ value: amount }("");
         require(sent, "fail to transfer withdraw to user");
         // 3.触发用户取回抵押
         emit CollateralWithdrawn(msg.sender, amount, i_cornDEX.currentPrice());
@@ -78,27 +78,52 @@ contract Lending is Ownable {
      * @param user The address of the user to calculate the collateral value for
      * @return uint256 The collateral value
      */
-    function calculateCollateralValue(address user) public view returns (uint256) {}
+    function calculateCollateralValue(address user) public view returns (uint256) {
+        // 1.获取用户的抵押
+        uint256 userCollateral = s_userCollateral[user];
+        // 2.计算抵押的corn价值
+        return userCollateral * i_cornDEX.currentPrice();
+    }
 
     /**
      * @notice Calculates the position ratio for a user to ensure they are within safe limits
      * @param user The address of the user to calculate the position ratio for
      * @return uint256 The position ratio
      */
-    function _calculatePositionRatio(address user) internal view returns (uint256) {}
+    function _calculatePositionRatio(address user) internal view returns (uint256) {
+        // 1.获取用户的代币抵押和贷款
+        uint256 userBorrowed = s_userBorrowed[user];
+        uint256 userCollateralValue = calculateCollateralValue(user);
+        // 2.如果没有贷款，返回最大值
+        if (userBorrowed == 0) {
+            return type(uint256).max;
+        }
+        // 3.否则计算抵贷比
+        // 注意：先 * 1e18以防精度丢失
+        return (userCollateralValue * 1e18) / userBorrowed;
+    }
 
     /**
      * @notice Checks if a user's position can be liquidated
      * @param user The address of the user to check
      * @return bool True if the position is liquidatable, false otherwise
      */
-    function isLiquidatable(address user) public view returns (bool) {}
+    function isLiquidatable(address user) public view returns (bool) {
+        // 返回是否达到清算点，
+        // 注意：position是百分比，需要 * 100，而 COLLATERAL_RATIO要与position一样扩大1e18
+        return _calculatePositionRatio(user) * 100 < COLLATERAL_RATIO * 1e18;
+    }
 
     /**
      * @notice Internal view method that reverts if a user's position is unsafe
      * @param user The address of the user to validate
      */
-    function _validatePosition(address user) internal view {}
+    function _validatePosition(address user) internal view {
+        // 校验借贷比合法
+        if (isLiquidatable(user)) {
+            revert Lending__UnsafePositionRatio();
+        }
+    }
 
     /**
      * @notice Allows users to borrow corn based on their collateral
