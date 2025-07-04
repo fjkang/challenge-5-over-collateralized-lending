@@ -45,13 +45,33 @@ contract Lending is Ownable {
     /**
      * @notice Allows users to add collateral to their account
      */
-    function addCollateral() public payable {}
+    function addCollateral() public payable {
+        // 1.校验eth是否为0
+        if (msg.value == 0) {
+            revert Lending__InvalidAmount();
+        }
+        // 2.更新用户存入的抵押
+        s_userCollateral[msg.sender] += msg.value;
+        // 3.触发用户存入抵押事件
+        emit CollateralAdded(msg.sender, msg.value, i_cornDEX.currentPrice());
+    }
 
     /**
      * @notice Allows users to withdraw collateral as long as it doesn't make them liquidatable
      * @param amount The amount of collateral to withdraw
      */
-    function withdrawCollateral(uint256 amount) public {}
+    function withdrawCollateral(uint256 amount) public {
+        // 1.校验amonut是否为0或用户是否有足够的抵押
+        if (amount == 0 || amount > s_userCollateral[msg.sender]) {
+            revert Lending__InvalidAmount();
+        }
+        // 2.更新用户取回的抵押
+        s_userCollateral[msg.sender] -= amount;
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "fail to transfer withdraw to user");
+        // 3.触发用户取回抵押
+        emit CollateralWithdrawn(msg.sender, amount, i_cornDEX.currentPrice());
+    }
 
     /**
      * @notice Calculates the total collateral value for a user based on their collateral balance
