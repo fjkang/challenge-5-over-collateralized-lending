@@ -84,7 +84,7 @@ contract Lending is Ownable {
         uint256 userCollateral = s_userCollateral[user];
         // 2.计算抵押的corn价值
         // ⚠️这里需要除以一个1e18
-        return userCollateral * i_cornDEX.currentPrice() / 1e18;
+        return (userCollateral * i_cornDEX.currentPrice()) / 1e18;
     }
 
     /**
@@ -175,5 +175,40 @@ contract Lending is Ownable {
      * @dev The caller must have enough CORN to pay back user's debt
      * @dev The caller must have approved this contract to transfer the debt
      */
-    function liquidate(address user) public {}
+    function liquidate(address user) public {
+        // 函数作用：msg.sender通过corn买负债用户的抵押价值
+        address liquidator = msg.sender;
+        // 1.校验用户是否能做liquidate
+        if (!isLiquidatable(user)) {
+            revert Lending__NotLiquidatable();
+        }
+        // 2.判断是否有足够的corn做清算
+        uint256 userDebt = s_userBorrowed[user];
+        if (i_corn.balanceOf(liquidator) < userDebt) {
+            revert Lending__InsufficientLiquidatorCorn();
+        }
+        // 3.清算用户的贷款和抵押
+        // 3.1 负债用户的抵押
+        uint256 userCollateral = s_userCollateral[user];
+        // 3.2 负债用户的抵押价值
+        uint256 userCollateralValue = calculateCollateralValue(user);
+        // 3.3 还债用户通过转移corn还款
+        i_corn.transferFrom(liquidator, address(this), userDebt);
+        s_userBorrowed[user] = 0;
+        // 3.4 计算负债用户对应的价值
+        uint256 collateralPurchase = (userCollateral * userDebt) / userCollateralValue;
+        // 3.5 计算还债用户回报
+        uint256 liquidatorReward = (collateralPurchase * LIQUIDATOR_REWARD) / 100;
+        // 3.6 计算还债用户的总收益
+        uint256 amountForLiquidator = collateralPurchase + liquidatorReward;
+        // 3.7 更新清算值，以防超出负债用户抵押
+        amountForLiquidator = amountForLiquidator > userCollateral ? userCollateral : amountForLiquidator;
+        // 4.更新负债用户抵押
+        s_userCollateral[user] = userCollateral - amountForLiquidator;
+        // 5.还债用户获得负债用户的抵押
+        (bool sent, ) = payable(liquidator).call{value: amountForLiquidator}("");
+        require(sent, "fail to liquidate");
+        // 6.触发清算事件
+        emit Liquidation(user, liquidator, amountForLiquidator, userDebt, i_cornDEX.currentPrice());
+    }
 }
