@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     Corn: {
-      address: "0xAA292E8611aDF267e563f334Ee42320aC96D0463",
+      address: "0x22753E4264FDDc6181dc7cce468904A80a363E44",
       abi: [
         {
           inputs: [],
@@ -476,7 +476,7 @@ const deployedContracts = {
       },
     },
     CornDEX: {
-      address: "0x5c74c94173F05dA1720953407cbb920F3DF9f887",
+      address: "0xA7c59f010700930003b33aB25a7a0679C860f29c",
       abi: [
         {
           inputs: [
@@ -783,7 +783,7 @@ const deployedContracts = {
       inheritedFunctions: {},
     },
     Lending: {
-      address: "0x720472c8ce72c2A2D711333e064ABD3E6BbEAdd3",
+      address: "0xfaAddC93baf78e89DCf37bA67943E1bE8F37Bb8c",
       abi: [
         {
           inputs: [
@@ -1185,7 +1185,7 @@ const deployedContracts = {
       },
     },
     MovePrice: {
-      address: "0xe8D2A1E88c91DCd5433208d4152Cc4F399a7e91d",
+      address: "0x276C216D241856199A83bf27b2286659e5b877D3",
       abi: [
         {
           inputs: [

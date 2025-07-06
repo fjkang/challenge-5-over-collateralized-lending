@@ -68,9 +68,13 @@ contract Lending is Ownable {
         }
         // 2.更新用户取回的抵押
         s_userCollateral[msg.sender] -= amount;
+        // 3.校验用户取回后是否超过安全线
+        if (s_userBorrowed[msg.sender] > 0) {
+            _validatePosition(msg.sender);
+        }
         (bool sent, ) = msg.sender.call{ value: amount }("");
         require(sent, "fail to transfer withdraw to user");
-        // 3.触发用户取回抵押
+        // 4.触发用户取回抵押
         emit CollateralWithdrawn(msg.sender, amount, i_cornDEX.currentPrice());
     }
 
@@ -206,7 +210,7 @@ contract Lending is Ownable {
         // 4.更新负债用户抵押
         s_userCollateral[user] = userCollateral - amountForLiquidator;
         // 5.还债用户获得负债用户的抵押
-        (bool sent, ) = payable(liquidator).call{value: amountForLiquidator}("");
+        (bool sent, ) = payable(liquidator).call{ value: amountForLiquidator }("");
         require(sent, "fail to liquidate");
         // 6.触发清算事件
         emit Liquidation(user, liquidator, amountForLiquidator, userDebt, i_cornDEX.currentPrice());
